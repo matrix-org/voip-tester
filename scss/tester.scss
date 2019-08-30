@@ -1,0 +1,38 @@
+/*
+ *
+ */
+
+@import "normalize";
+@import "skeleton";
+
+$backgroundColour: #000;
+$inputBackgroundColour: #222;
+$foregroundColour: #eee;
+
+html, body {
+    margin: 0;
+    padding: 0;
+    background: $backgroundColour;
+    color: $foregroundColour;
+    font-family: sans-serif;
+}
+
+hr {
+    background-color: darken($foregroundColour, 10%);
+}
+
+.container {
+    margin-top: 2em;
+}
+
+input {
+    background-color: $inputBackgroundColour !important;
+}
+
+#progresslist progress {
+    width: 10em;
+    height: 1em;
+    display: inline;
+    margin-right: 1em;
+}
+

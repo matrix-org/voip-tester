@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta charset="utf-8">
+        <link rel="stylesheet" type="text/css" href="static/tester.css">
+        <!--- AdapterJS required on e.g. Firefox -->
+        <script type="text/javascript" src="static/adapter.min.0.15.4.js"></script>
+        <script type="text/javascript" src="static/tester_abstract.js"></script>
+        <script type="text/javascript" src="static/tester_builtin.js"></script>
+        <title>Matrix VoIP Tester</title>
+    </head>
+    <body>
+        <div class="container">
+            <h1>Matrix VoIP Tester</h1>
+
+            <form id="testform">
+                <p>
+                    This utility will try to test your homeserver's STUN/TURN configuration.
+                    A working STUN and TURN configuration is <strong>crucial</strong> for reliable VoIP (e.g. voice/video calls) in the vast majority of circumstances.
+                <p>
+                <h2>Homeserver Details</h2>
+                <div class="row">
+                    <div class="six columns">
+                        <label for="homeserver">Homeserver URL</label>
+                        <input class="u-full-width" type="text" name="homeserver" id="homeserver" placeholder="https://matrix.org">
+                    </div>
+                    <div class="six columns"><fieldset>
+                        <legend>Authentication Method</legend>
+                        <label>
+                            <input type="radio" name="authmeth" value="userpass" id="authmeth_userpass" onchange="console.log(this, this.checked);">
+                            <span class="label-body">User ID and Password</span>
+                        </label>
+                        <label>
+                            <input type="radio" name="authmeth" value="accesstoken" id="authmeth_accesstoken">
+                            <span class="label-body">Access Token</span>
+                        </label>
+                    </fieldset></div>
+                </div>
+                <div id="auth_userpass" class="row">
+                    <div class="six columns">
+                        <label for="userid">User ID</label>
+                        <input class="u-full-width" type="text" name="userid" id="userid" placeholder="reivilibre">
+                    </div>
+                    <div class="six columns">
+                        <label for="password">Password</label>
+                        <input class="u-full-width" type="password" name="password" id="password" placeholder="correct horse battery staple">
+                    </div>
+                </div>
+                <div id="auth_accesstoken" class="row">
+                    <label for="accesstoken">Access Token</label>
+                    <input class="u-full-width" type="text" name="accesstoken" id="accesstoken" placeholder="MDAxMmxvY2F0aW9uIHNhd…">
+                </div>
+
+                <input class="button-primary" type="submit" value="Test VoIP">
+            </form>
+
+            <div id="progress">
+                <h2>Progress</h2>
+                <p>Please be patient, the test is being performed now…</p>
+                <ul id="progresslist">
+                    <!---Populated by JavaScript: <li><progress value="22" max="100"></progress><span>Progress lol</span></li>-->
+                </ul>
+            </div>
+
+            <div id="results">
+                <h2>Results</h2>
+                <p>Here are the results:</p>
+            </div>
+        </div>
+    </body>
+</html>
