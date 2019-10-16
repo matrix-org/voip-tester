@@ -331,7 +331,7 @@ class VoIPTester {
                 });
         }
 
-        return builtPromise;
+        return builtPromise.then(() => testPassReport);
     }
 
     runTest() {
@@ -353,13 +353,18 @@ class VoIPTester {
 
                 return this.runIpVersionedTest('IPv4', testReport, testReport.turnConfig);
             })
-            .then(() => {
+            .then((ipv4) => {
+                testReport.passes.IPv4 = ipv4;
                 this.onProgress(1, 2, 3, "Testing (IPv6 candidates)");
 
                 return this.runIpVersionedTest('IPv6', testReport, testReport.turnConfig);
             })
-            .then(() => {
-                // TODO finalise & return report in some way.
+            .then((ipv6) => {
+                testReport.passes.IPv6 = ipv6;
+                
+                // TODO finalise and process report
+                
+                return testReport;
             });
     }
 
