@@ -66,7 +66,9 @@ class BuiltinVoIPTester extends VoIPTester {
             "password",
             "accesstoken",
             "testform",
-            "progresslist"
+            "progresslist",
+            "progress",
+            "results"
         ];
 
         for (let i = 0; i < wantedEles.length; ++i) {
@@ -79,11 +81,16 @@ class BuiltinVoIPTester extends VoIPTester {
         elements.authmeth_accesstoken.addEventListener('change', radioChangeListener);
 
         elements.testform.addEventListener('submit', (event) => {
+            event.preventDefault();
+
             if (! isCurrentlyTesting) {
                 isCurrentlyTesting = true;
                 let tester = new BuiltinVoIPTester(elements.homeserver.value, 'v1/test_me', elements.progresslist);
 
                 let loginPromise;
+
+                // unhide progress display
+                elements.progress.style.display = 'block';
 
                 if (elements.authmeth_userpass.checked) {
                     loginPromise = tester.loginWithUserIdAndPassword(elements.userid.value, elements.password.value);
@@ -103,8 +110,6 @@ class BuiltinVoIPTester extends VoIPTester {
                         });
                 });
             }
-
-            event.preventDefault();
         });
 
         radioChangeListener(null);
