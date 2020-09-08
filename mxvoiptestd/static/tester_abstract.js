@@ -221,7 +221,7 @@ class VoIPTester {
         return sdpLines.join("\r\n");
     }
 
-    testTurnRelaying(ipVersion, candidateResult) {
+    async testTurnRelaying(ipVersion, candidateResult) {
         // select a relay candidate of the appropriate IP version
         let candidate = null;
         for (let i = 0; i < candidateResult.candidates.length; ++i) {
@@ -243,38 +243,31 @@ class VoIPTester {
         let doctoredSdp = this.doctorOfferSdp(connection.localDescription.sdp, candidate);
 
         console.log("about to set doctored");
-        connection.setLocalDescription({
+        await connection.setLocalDescription({
             sdp: doctoredSdp, type: 'offer'
-        })
-            .then(() => {
-                console.log("just set doctored");
-                return fetch(this.remoteTestServiceUrl, {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({
-                        offer: connection.localDescription,
-                        // candidate.candidate gives the SDP a= description of the
-                        // candidate.
-                        candidate: candidate.candidate
-                    })
-                })
+        });
+        console.log("just set doctored");
+        const resp = await fetch(this.remoteTestServiceUrl, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                offer: connection.localDescription,
+                // candidate.candidate gives the SDP a= description of the
+                // candidate.
+                candidate: candidate.candidate
             })
-            .then(resp => {
-                if (resp.status != 200) {
-                    throw new VoIPTesterError(
-                        VoIPTesterErrors.FAILED_SERVICE_REQUEST,
-                        resp.status + " when contacting testing service"
-                    );
-                }
-                return resp;
-            })
-            .then(resp => resp.json())
-            .then(serviceResponse => {
-                console.log("ANSWER", serviceResponse.answer);
-                connection.setRemoteDescription(serviceResponse.answer);
-            });
+        });
 
+        if (resp.status != 200) {
+            throw new VoIPTesterError(
+                VoIPTesterErrors.FAILED_SERVICE_REQUEST,
+                resp.status + " when contacting testing service"
+            );
+        }
 
+        const serviceResponse = await resp.json();
+        console.log("ANSWER", serviceResponse.answer);
+        connection.setRemoteDescription(serviceResponse.answer);
 
         // TODO wait for things to happen … or time out with failure (does this happen automatically?)
 
@@ -287,44 +280,35 @@ class VoIPTester {
      * Note that the IP version refers to that of the candidates – not that
      * of the STUN/TURN protocol itself (as we cannot control that really).
      */
-    runIpVersionedTest(ipVersion, testReport, turnConfig) {
+    async runIpVersionedTest(ipVersion, testReport, turnConfig) {
         let numUris = turnConfig.uris.length;
         let numTested = 0;
         let candidateResults = [];
 
-        let builtPromise = Promise.resolve();
-
         let testPassReport = testReport.passes[ipVersion];
 
         for (let i = 0; i < numUris; ++i) {
-            let turnUri = turnConfig.uris[i];
+            const turnUri = turnConfig.uris[i];
             testPassReport[turnUri] = {};
 
-            builtPromise = builtPromise
-                .then(() => {
-                    this.onProgress(2, i, numUris, "TURN URI: " + turnUri);
-                    this.onProgress(3, 0, 2, "Gathering candidates");
+            this.onProgress(2, i, numUris, "TURN URI: " + turnUri);
+            this.onProgress(3, 0, 2, "Gathering candidates");
 
-                    return this.gatherCandidatesForIceServer(turnUri, turnConfig.username, turnConfig.password);
-                })
-                .then((candidateResult) => {
-                    testPassReport[turnUri].candidates = this.summariseCandidateGathering(candidateResult);
+            const candidateResult = await this.gatherCandidatesForIceServer(turnUri, turnConfig.username, turnConfig.password);
+            testPassReport[turnUri].candidates = this.summariseCandidateGathering(candidateResult);
 
-                    this.onProgress(3, 1, 2, "Testing TURN relaying");
+            this.onProgress(3, 1, 2, "Testing TURN relaying");
 
-                    return this.testTurnRelaying(ipVersion, candidateResult);
-                })
-                .then((turnRelayResult) => {
-                    testPassReport[turnUri].turnRelayResult = turnRelayResult;
+            const turnRelayResult = await this.testTurnRelaying(ipVersion, candidateResult);
+            testPassReport[turnUri].turnRelayResult = turnRelayResult;
 
-                    testPassReport[turnUri].report = this.summariseTurnUriReport(ipVersion, testPassReport[turnUri]);
-                });
+            testPassReport[turnUri].report = this.summariseTurnUriReport(ipVersion, testPassReport[turnUri]);
         }
 
-        return builtPromise.then(() => testPassReport);
+        return testPassReport;
     }
 
-    runTest() {
+    async runTest() {
         this.onProgress(1, 0, 3, "Requesting TURN details from homeserver");
 
         let testReport = {
@@ -334,28 +318,22 @@ class VoIPTester {
             }
         };
 
-        return this
-            .gatherTurnConfig()
-            .then((turnConfig) => {
-                this.onProgress(1, 1, 3, "Testing (IPv4 candidates)");
+        const turnConfig = await this.gatherTurnConfig();
 
-                testReport.turnConfig = turnConfig;
+        this.onProgress(1, 1, 3, "Testing (IPv4 candidates)");
 
-                return this.runIpVersionedTest('IPv4', testReport, testReport.turnConfig);
-            })
-            .then((ipv4) => {
-                testReport.passes.IPv4 = ipv4;
-                this.onProgress(1, 2, 3, "Testing (IPv6 candidates)");
+        testReport.turnConfig = turnConfig;
 
-                return this.runIpVersionedTest('IPv6', testReport, testReport.turnConfig);
-            })
-            .then((ipv6) => {
-                testReport.passes.IPv6 = ipv6;
-                
-                // TODO finalise and process report
-                
-                return testReport;
-            });
+        const ipv4 = await this.runIpVersionedTest('IPv4', testReport, testReport.turnConfig);
+        testReport.passes.IPv4 = ipv4;
+        this.onProgress(1, 2, 3, "Testing (IPv6 candidates)");
+
+        const ipv6 = await this.runIpVersionedTest('IPv6', testReport, testReport.turnConfig);
+        testReport.passes.IPv6 = ipv6;
+
+        // TODO finalise and process report
+
+        return testReport;
     }
 
 
