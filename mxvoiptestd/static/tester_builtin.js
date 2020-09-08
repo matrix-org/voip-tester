@@ -44,13 +44,32 @@ class BuiltinVoIPTester extends VoIPTester {
     }
 }
 
+async function performTest() {
+    const tester = new BuiltinVoIPTester(elements.homeserver.value, 'v1/test_me', elements.progresslist);
+
+    // unhide progress display
+    elements.progress.hidden = false;
+
+    if (elements.authmeth_userpass.checked) {
+        await tester.loginWithUserIdAndPassword(elements.userid.value, elements.password.value);
+    } else if (elements.authmeth_accesstoken.checked) {
+        await tester.loginWithAccessToken(elements.accesstoken.value);
+    } else {
+        alert("What authentication method are you using?");
+        return;
+    }
+
+    console.log("Logged in");
+    const report = await tester.runTest();
+    console.log(report);
+    isCurrentlyTesting = false;
+}
+
 (function(){
 
     function radioChangeListener(_e) {
-        elements.auth_userpass.style.display =
-            elements.authmeth_userpass.checked ? 'block' : 'none';
-        elements.auth_accesstoken.style.display =
-            elements.authmeth_accesstoken.checked ? 'block' : 'none';
+        elements.auth_userpass.hidden = ! elements.authmeth_userpass.checked;
+        elements.auth_accesstoken.style.display = ! elements.authmeth_accesstoken.checked;
     }
 
     window.addEventListener('DOMContentLoaded', (event) => {
@@ -85,30 +104,13 @@ class BuiltinVoIPTester extends VoIPTester {
 
             if (! isCurrentlyTesting) {
                 isCurrentlyTesting = true;
-                let tester = new BuiltinVoIPTester(elements.homeserver.value, 'v1/test_me', elements.progresslist);
-
-                let loginPromise;
-
-                // unhide progress display
-                elements.progress.style.display = 'block';
-
-                if (elements.authmeth_userpass.checked) {
-                    loginPromise = tester.loginWithUserIdAndPassword(elements.userid.value, elements.password.value);
-                } else if (elements.authmeth_accesstoken.checked) {
-                    loginPromise = tester.loginWithAccessToken(elements.accesstoken.value);
-                } else {
-                    alert("What authentication method are you using?");
-                    return;
-                }
-
-                loginPromise.then(() => {
-                    console.log("Logged in");
-                    tester.runTest()
-                        .then(report => {
-                            console.log(report);
-                            isCurrentlyTesting = false;
-                        });
-                });
+                performTest()
+                    .then(report => {
+                        // TODO do this
+                    })
+                    .catch(exc => {
+                        alert("Failed " + exc); // TODO handle this
+                    });
             }
         });
 

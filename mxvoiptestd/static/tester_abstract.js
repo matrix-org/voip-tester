@@ -135,7 +135,6 @@ class VoIPTester {
 
     gatherCandidatesForIceServer(turnUri, turnUsername, turnPassword) {
         // filter out host results
-
         let candidates = [];
 
         let conn = new RTCPeerConnection({
@@ -150,7 +149,7 @@ class VoIPTester {
 
         let datchan = conn.createDataChannel("voiptest");
 
-        // TODO
+        // TODO debug
         window.conn = conn;
         window.datchan = datchan;
         window.candidates = candidates;
@@ -192,12 +191,12 @@ class VoIPTester {
      * Beware that this probably won't behave for more than one media track.
      */
     doctorOfferSdp(offerSdp, soleWantedCandidate) {
-        let sdpLines = offerSdp.split(/\r?\n/g);
+        const sdpLines = offerSdp.split(/\r?\n/g);
 
-        let foundPreservedCandidate = false;
+        const foundPreservedCandidate = false;
 
         // .candidate gives the candidate SDP for it.
-        let checkingFor = "a=" + soleWantedCandidate.candidate;
+        const checkingFor = "a=" + soleWantedCandidate.candidate;
 
         for (let i = sdpLines.length - 1; i >= 0; --i) {
             if (sdpLines[i].startsWith("a=candidate:")) {
