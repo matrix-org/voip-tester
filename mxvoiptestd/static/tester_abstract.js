@@ -64,83 +64,73 @@ class VoIPTester {
         return fetch(this.homeserver + "/_matrix/client/r0" + path, extra);
     }
 
-    loginWithUserIdAndPassword(userId, password) {
-        return this
-            ._fetchClient("/login", "POST", {
-                type: "m.login.password",
-                identifier: {
-                    type: "m.id.user",
-                    user: userId,
-                },
-                password: password,
-                initial_device_display_name: "VoIP Tester",
-            })
-            .then((resp) => {
-                if (resp.status == 200) {
-                    return resp.json().then((json) => {
-                        this.accessToken = json.access_token;
-                    });
-                } else if (resp.status == 403) {
-                    throw new VoIPTesterError(
-                        VoIPTesterErrors.BAD_CREDENTIALS,
-                        resp.json().error || "403 on /login"
-                    );
-                } else if (resp.status == 400) {
-                    throw new VoIPTesterError(
-                        VoIPTesterErrors.LOGIN_FAILURE,
-                        resp.json().error || "400 on /login"
-                    );
-                } else {
-                    return resp.json().then(json => {
-                        let errStr = json.errcode + " " + json.error + " " + resp.status;
-                        throw new VoIPTesterError(
-                            VoIPTesterErrors.UNKNOWN,
-                            errStr
-                        );
-                    });
-                }
-            });
+    async loginWithUserIdAndPassword(userId, password) {
+        const resp = await this._fetchClient("/login", "POST", {
+            type: "m.login.password",
+            identifier: {
+                type: "m.id.user",
+                user: userId,
+            },
+            password: password,
+            initial_device_display_name: "VoIP Tester",
+        });
+        
+        const resp_obj = await resp.json();
+        
+        if (resp.status == 200) {
+            this.accessToken = resp_obj.access_token;
+        } else if (resp.status == 403) {
+            throw new VoIPTesterError(
+                VoIPTesterErrors.BAD_CREDENTIALS,
+                resp_obj.error || "403 on /login"
+            );
+        } else if (resp.status == 400) {
+            throw new VoIPTesterError(
+                VoIPTesterErrors.LOGIN_FAILURE,
+                resp_obj.error || "400 on /login"
+            );
+        } else {
+            const errStr = resp_obj.errcode + " " + resp_obj.error + " " + resp_obj.status;
+            throw new VoIPTesterError(
+                VoIPTesterErrors.UNKNOWN,
+                errStr
+            );
+        }
     }
 
-    loginWithAccessToken(accessToken) {
+    async loginWithAccessToken(accessToken) {
         this.accessToken = accessToken;
-        return this._fetchClient("/account/whoami", "GET")
-            .then((response) => {
-                console.log("then", response);
-            })
-            .catch((error) => {
-                throw new VoIPTesterError(
-                    VoIPTesterErrors.FAILED_HOMESERVER_CONNECTION,
-                    "Failed to connect for /account/whoami",
-                    error
-                );
-            });
+        try {
+            const response = await this._fetchClient("/account/whoami", "GET");
+            console.log("then", response);
+        } catch (error) {
+            throw new VoIPTesterError(
+                VoIPTesterErrors.FAILED_HOMESERVER_CONNECTION,
+                "Failed to connect for /account/whoami",
+                error
+            );
+        }
     }
 
-    gatherTurnConfig() {
-        return this
-            ._fetchClient("/voip/turnServer", "GET")
-            .then((resp) => {
-                if (resp.status != 200) {
-                    return resp.json().then(json => {
-                        let errStr = json.errcode + " " + json.error + " " + resp.status;
+    async gatherTurnConfig() {
+        const resp = await this._fetchClient("/voip/turnServer", "GET");
+        const resp_obj = await resp.json();
+        
+        if (resp.status != 200) {
+            const errStr = resp_obj.errcode + " " + resp_obj.error + " " + resp_obj.status;
 
-                        throw new VoIPTesterError(
-                            VoIPTesterErrors.CANNOT_GET_TURN_CREDENTIALS,
-                            errStr
-                        );
-                    });
-                }
-                return resp.json().then(json => {
-                    if (json.uris.length < 1) {
-                        throw new VoIPTesterError(
-                            VoIPTesterErrors.NO_TURN_SERVERS,
-                            "Empty `uris` list from /voip/turnServer"
-                        );
-                    }
-                    return json;
-                });
-            });
+            throw new VoIPTesterError(
+                VoIPTesterErrors.CANNOT_GET_TURN_CREDENTIALS,
+                errStr
+            );
+        }
+        if (resp_obj.uris.length < 1) {
+            throw new VoIPTesterError(
+                VoIPTesterErrors.NO_TURN_SERVERS,
+                "Empty `uris` list from /voip/turnServer"
+            );
+        }
+        return resp_obj;
     }
 
     gatherCandidatesForIceServer(turnUri, turnUsername, turnPassword) {
