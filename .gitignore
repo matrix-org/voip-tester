@@ -2,3 +2,4 @@
 .sass-cache
 /matrix_voip_tester.egg-info
 /mxvoiptestd/__pycache__
+/.private

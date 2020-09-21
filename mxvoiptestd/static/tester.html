@@ -62,9 +62,25 @@
                 </ul>
             </div>
 
-            <div id="results" hidden="true">
+            <div id="results" hidden="false">
                 <h2>Results</h2>
-                <p>Here are the results:</p>
+                <div id="result_container">
+                    <div class="report-node expandable">
+                        <div class="title">Ask homeserver for TURN servers</div>
+                        <div class="subtitle">3 URIs received. Credentials</div>
+                        <div class="verdict excellent">Excellent</div>
+                    </div>
+                    <div class="report-node expandable">
+                        <div class="title">Test servers (IPv4)</div>
+                        <div class="subtitle">STUN only</div>
+                        <div class="verdict poor">Poor</div>
+                    </div>
+                    <div class="report-node expandable">
+                        <div class="title">Test servers (IPv6)</div>
+                        <div class="subtitle">No support</div>
+                        <div class="verdict fail">Fail</div>
+                    </div>
+                </div>
             </div>
         </div>
     </body>

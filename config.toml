@@ -1,0 +1,5 @@
+[TURN]
+# optional, but may be necessary if operating the tester locally for development
+uri = "turn:turn.example.org:3478?transport=udp"
+username = "example"
+password = "secret"

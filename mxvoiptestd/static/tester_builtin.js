@@ -11,6 +11,8 @@ class BuiltinVoIPTester extends VoIPTester {
     }
 
     onProgress(level, currentValue, maxValue, statusLine) {
+        super.onProgress(level, currentValue, maxValue, statusLine);
+
         // remove obsolete progress levels if required
         for (let i = level; i < this.progresses.length; ++i) {
             let toRemove = this.progresses.pop().holder;
@@ -44,6 +46,249 @@ class BuiltinVoIPTester extends VoIPTester {
     }
 }
 
+function newReportNode(parent, title, subtitle, verdict, hasChildren) {
+    const reportNode = document.createElement('div');
+    parent.appendChild(reportNode);
+    reportNode.classList.add('report-node');
+
+    const titleEle = document.createElement('div');
+    reportNode.appendChild(titleEle);
+    titleEle.classList.add('title');
+    titleEle.textContent = title;
+
+    if (subtitle !== null) {
+        const subtitleEle = document.createElement('div');
+        reportNode.appendChild(subtitleEle);
+        subtitleEle.classList.add('subtitle');
+        subtitleEle.textContent = subtitle;
+    }
+
+    if (verdict !== null) {
+        const verdictEle = document.createElement('div');
+        reportNode.appendChild(verdictEle);
+        verdictEle.classList.add('verdict');
+        verdictEle.classList.add(verdict.toLowerCase());
+        verdictEle.textContent = verdict;
+    }
+
+    if (hasChildren) {
+        const childContainer = document.createElement('div');
+        parent.appendChild(childContainer);
+
+        childContainer.classList.add('report-subtree');
+
+        childContainer.hidden = true;
+
+        reportNode.classList.add('expandable');
+        reportNode.addEventListener('click', () => {
+            childContainer.hidden = !childContainer.hidden;
+            if (childContainer.hidden) {
+                reportNode.classList.remove('expanded');
+            } else {
+                reportNode.classList.add('expanded');
+            }
+        });
+        return childContainer;
+    }
+}
+
+function escapeHtml(str) {
+    const p = document.createElement('p');
+    p.textContent = str;
+    return p.innerHTML;
+}
+
+function newInfoNode(parent, text) {
+    const infoNode = document.createElement('div');
+    parent.appendChild(infoNode);
+    infoNode.classList.add('report-info-node');
+    infoNode.textContent = text;
+    return infoNode;
+}
+
+function displayVersionedReport(report, version, rootNode) {
+    const turnUrisSorted = Object.keys(report);
+    turnUrisSorted.sort();
+
+    let stunSupported = false;
+    let turnSupported = false;
+
+    let flags = {
+        'tcp-turn': false,
+        'tcp-turns': false,
+        'tcp-turns-443': false,
+        'udp-turn': false,
+        'udp-turns': false,
+    };
+
+    for (let server of turnUrisSorted) {
+        let reportForServer = report[server];
+
+        if (reportForServer.report.stun) {
+            stunSupported = true;
+        }
+        if (reportForServer.report.turn) {
+            turnSupported = true;
+        }
+
+        for (let flag of reportForServer.report.flags) {
+            flags[flag] = true;
+        }
+    }
+
+    const combo = (stunSupported ? 'S' : '') + (turnSupported ? 'T' : '');
+
+    let verSummary;
+    let verVerdict;
+
+    switch (combo) {
+    case 'S':
+        verSummary = 'STUN only (No TURN)';
+        verVerdict = 'Poor';
+        break;
+    case 'T':
+        verSummary = 'TURN only (No STUN)';
+        verVerdict = 'Poor';
+        break;
+    case 'ST':
+        verSummary = 'STUN & TURN';
+        // TODO we may want to not mark people down for not supplying insecure TURN protocols...?
+        if (flags['tcp-turn'] && flags['tcp-turns'] && flags['tcp-turns-443']
+            && flags['udp-turn'] && flags['udp-turns']) {
+            verVerdict = 'Excellent';
+        } else if (flags['tcp-turn'] && flags['tcp-turns']
+            && flags['udp-turn'] && flags['udp-turns']) {
+            verVerdict = 'Great';
+        } else {
+            verVerdict = 'Good';
+        }
+        break;
+    case '':
+        verSummary = 'No support';
+        verVerdict = 'Fail';
+        break;
+    default:
+        verSummary = '???';
+        verVerdict = '???';
+    }
+
+    const verNode = newReportNode(rootNode, 'Test servers (' + version + ')', verSummary, verVerdict, true);
+
+
+    for (let server of turnUrisSorted) {
+        let reportForServer = report[server];
+
+        const scombo = (reportForServer.report.stun ? 'S' : '') + (reportForServer.report.turn ? 'T' : '');
+
+        let serverSummary;
+        let serverVerdict;
+
+        switch (scombo) {
+            case 'S':
+                serverSummary = 'STUN only';
+                serverVerdict = 'Poor';
+                break;
+            case 'T':
+                serverSummary = 'TURN only';
+                serverVerdict = 'Poor';
+                break;
+            case 'ST':
+                serverSummary = 'STUN & TURN';
+                serverVerdict = 'Excellent';
+                break;
+            case '':
+                serverSummary = "Didn't work";
+                serverVerdict = 'Fail';
+                break;
+            default:
+                serverSummary = '???';
+                serverVerdict = '???';
+        }
+
+        const serverNode = newReportNode(verNode, server, serverSummary, serverVerdict, true);
+
+        const infoNode = newInfoNode(serverNode, '');
+
+        let para = document.createElement('p');
+        infoNode.appendChild(para);
+
+        if (reportForServer.turnRelayResult.success) {
+            para.textContent = 'Succeeded the relaying test.';
+        } else {
+            para.textContent = 'Failed the relaying test: ' + reportForServer.turnRelayResult.error;
+        }
+
+        // again, not a fan of this approach of building DOM trees but no time
+        // to research anything better, really.
+
+        let candidateListHeading = document.createElement('strong');
+        infoNode.appendChild(candidateListHeading);
+        candidateListHeading.textContent = 'Candidates:';
+
+        let candidateList = document.createElement('ul');
+        infoNode.appendChild(candidateList);
+
+        for (let candidate of reportForServer.candidates.details) {
+            let candidateEle = document.createElement('li');
+            candidateList.appendChild(candidateEle);
+
+            let typeString = candidate.type;
+            if (candidate.type == 'srflx') {
+                typeString = 'server-reflexive (STUN)';
+            } else if (candidate.type == 'relay') {
+                typeString = 'relay (TURN)';
+            }
+
+            candidateEle.textContent = candidate.ip + ' port ' + candidate.port + '/' + candidate.proto + ' (' + typeString + ')';
+        }
+    }
+
+
+}
+
+function displayReport(report, rootNode) {
+    // clear it! Could be confusing to have multiple resultsets on the page.
+    rootNode.innerHTML = '';
+
+    const numTurnServers = report.turnConfig.uris.length;
+
+    const csApiNode = newReportNode(rootNode, 'Asked homeserver for TURN servers', numTurnServers + ' URIs received.', numTurnServers > 0 ? 'Excellent' : 'Fail', true);
+
+    if (numTurnServers > 0) {
+        const turnServerList = newInfoNode(csApiNode, 'GET /_matrix/client/r0/voip/turnServer yielded the following information:');
+
+        // TODO not a fan of the lists
+        let list = document.createElement('ul');
+        turnServerList.appendChild(list);
+
+        let listEle = document.createElement('li');
+        listEle.textContent = 'Username: ' + report.turnConfig.username;
+        list.appendChild(listEle);
+
+        listEle = document.createElement('li');
+        listEle.textContent = 'Password: ' + report.turnConfig.password;
+        list.appendChild(listEle);
+
+        listEle = document.createElement('li');
+        listEle.textContent = 'Server URIs:';
+        list.appendChild(listEle);
+
+        let uriList = document.createElement('ul');
+        listEle.appendChild(uriList);
+
+        for (let turnServerUri of report.turnConfig.uris) {
+            listEle = document.createElement('li');
+            listEle.textContent = turnServerUri;
+            uriList.appendChild(listEle);
+        }
+    } else {
+        newInfoNode(csApiNode, 'GET /_matrix/client/r0/voip/turnServer did not yield any TURN servers. Check your homeserver configuration.');
+    }
+
+    displayVersionedReport(report.passes['IPv4'], 'IPv4', rootNode);
+    displayVersionedReport(report.passes['IPv6'], 'IPv6', rootNode);
+}
+
 async function performTest() {
     const tester = new BuiltinVoIPTester(elements.homeserver.value, 'v1/test_me', elements.progresslist);
 
@@ -59,17 +304,15 @@ async function performTest() {
         return;
     }
 
-    console.log("Logged in");
-    const report = await tester.runTest();
-    console.log(report);
-    isCurrentlyTesting = false;
+    console.log("Logged in — running test now.");
+    return await tester.runTest();
 }
 
 (function(){
 
     function radioChangeListener(_e) {
         elements.auth_userpass.hidden = ! elements.authmeth_userpass.checked;
-        elements.auth_accesstoken.style.display = ! elements.authmeth_accesstoken.checked;
+        elements.auth_accesstoken.hidden = ! elements.authmeth_accesstoken.checked;
     }
 
     window.addEventListener('DOMContentLoaded', (event) => {
@@ -87,12 +330,12 @@ async function performTest() {
             "testform",
             "progresslist",
             "progress",
-            "results"
+            "results",
+            "result_container"
         ];
 
         for (let i = 0; i < wantedEles.length; ++i) {
             wantedEle = wantedEles[i];
-            console.log(wantedEle);
             elements[wantedEle] = document.getElementById(wantedEle);
         }
 
@@ -104,12 +347,23 @@ async function performTest() {
 
             if (! isCurrentlyTesting) {
                 isCurrentlyTesting = true;
+                elements.testform.hidden = true;
                 performTest()
                     .then(report => {
-                        // TODO do this
+                        console.log("Test report", report);
+
+                        elements.results.hidden = false;
+                        displayReport(report, elements.result_container);
                     })
                     .catch(exc => {
-                        alert("Failed " + exc); // TODO handle this
+                        // TODO handle this better
+                        alert("Error occurred during test: " + exc);
+                        console.error("Test erred", exc);
+                    })
+                    .finally(() => {
+                        isCurrentlyTesting = false;
+                        elements.progress.hidden = true;
+                        elements.testform.hidden = false;
                     });
             }
         });

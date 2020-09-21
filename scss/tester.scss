@@ -1,13 +1,17 @@
 /*
- *
+ * VoIP Tester
+ * Basic CSS
  */
 
 @import "normalize";
 @import "skeleton";
 
-$backgroundColour: #000;
+$backgroundColour: #203040;
 $inputBackgroundColour: #222;
 $foregroundColour: #eee;
+
+$reportNodeBackgroundColour: #456;
+
 
 html, body {
     margin: 0;
@@ -29,6 +33,12 @@ input {
     background-color: $inputBackgroundColour !important;
 }
 
+// #progresslist is our list of hierarchical progress bars
+#progresslist li {
+    // hide the bullet points
+    list-style-type: none;
+}
+
 #progresslist progress {
     width: 10em;
     height: 1em;
@@ -36,3 +46,78 @@ input {
     margin-right: 1em;
 }
 
+
+// .report-node is a node in our report tree
+// it can potentially be expanded
+// it can bear a title, subtitle and a coloured 'verdict'
+// see:
+//  expander   title                         subtitle  verdict
+// |---|-------------------------------------------|------|
+// | > | IPv4 Test                         No STUN | Poor |
+// |---|-------------------------------------------|------|
+
+.report-node {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    margin: 1em;
+    background-color: $reportNodeBackgroundColour;
+}
+
+.report-node.expandable {
+    cursor: pointer;
+}
+
+.report-node.expandable::before {
+    padding: 1em;
+    content: '+';
+}
+
+.report-node.expandable.expanded::before {
+    content: '−';
+}
+
+.report-node .title {
+    // make this one grow to fill the space
+    flex: 1 0;
+    margin: 1em;
+}
+
+.report-node .subtitle {
+    margin: 1em;
+}
+
+.verdict {
+    padding: 1em;
+}
+
+.verdict.fail {
+    background-color: #bb0000;
+}
+
+.verdict.poor {
+    background-color: #bb5e00;
+}
+
+.verdict.good {
+    background-color: #bbbb00;
+}
+
+.verdict.great {
+    background-color: #9ebb00;
+}
+
+.verdict.excellent {
+    background-color: #3dbb00;
+}
+
+// container for the child nodes
+.report-subtree {
+    margin-left: 1em;
+}
+
+// textual help within the results
+.report-info-node {
+    margin: 1em;
+    margin-right: 0;
+}

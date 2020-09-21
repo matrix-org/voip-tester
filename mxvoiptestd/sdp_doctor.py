@@ -18,3 +18,20 @@ def doctor_sdp(original_sdp, sole_wanted_candidate):
         media.ice_options = None
 
     return str(session_description)
+
+
+def remove_all_candidates(original_sdp):
+    # filter out all candidates from the SDP directly
+    session_description = SessionDescription.parse(original_sdp)
+
+    for media in session_description.media:
+        print("media", media)
+        media.ice_candidates = []
+        media.ice_candidates_complete = True
+
+        # remove a=ice-options: to prevent Trickle ICE, as we need to
+        # generate all the candidates at once as we only get one chance to
+        # answer over a REST call.
+        media.ice_options = None
+
+    return str(session_description)

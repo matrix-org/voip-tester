@@ -1,24 +1,46 @@
 import asyncio
+import logging
 
 from aiortc import RTCSessionDescription, RTCPeerConnection, RTCDataChannel
+from aiortc.sdp import SessionDescription
 
 MAGIC_QUESTION = "Hello? Is this on?"
 MAGIC_ANSWER = "Yes; yes, it is! :^)"
 
 TIMEOUT_TIME = 300
 
+logger = logging.getLogger(__name__)
+
 
 async def setup_test(connection: RTCPeerConnection, offer) -> RTCSessionDescription:
-    desc = RTCSessionDescription(offer["sdp"], offer["type"])
-    await connection.setRemoteDescription(desc)
+    description = RTCSessionDescription(offer["sdp"], offer["type"])
+
+    session_description = SessionDescription.parse(offer["sdp"])
+    if len(session_description.media) != 1:
+        raise ValueError("Only one media channel accepted.")
+
+    media = session_description.media[0]
+    if len(media.ice_candidates) != 1:
+        raise ValueError("Only one ICE candidate accepted.")
+
+    if not media.ice_candidates_complete:
+        raise ValueError("ICE candidates must be completed")
+
+    candidate = media.ice_candidates[0]
+
+    await connection.setRemoteDescription(description)
     await connection.setLocalDescription(await connection.createAnswer())
+
+    logger.debug(f"[{candidate}] Beginning test with this candidate…")
 
     @connection.on("datachannel")
     def on_datachannel(channel: RTCDataChannel):
-        # TODO debug()
+        logger.debug(f"[{candidate}] Established an RTCDataChannel")
+
         @channel.on("message")
         def on_message(message):
-            # TODO debug()
+            logger.debug(f"[{candidate}] Received a message")
+
             if message == MAGIC_QUESTION:
                 channel.send(MAGIC_ANSWER)
             else:

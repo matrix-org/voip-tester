@@ -8,9 +8,9 @@ class VoIPTesterError extends Error {
         // https://stackoverflow.com/a/500531
         this.name = this.constructor.name;
         if (typeof Error.captureStackTrace === 'function') {
-          Error.captureStackTrace(this, this.constructor);
+            Error.captureStackTrace(this, this.constructor);
         } else {
-          this.stack = (new Error(message)).stack;
+            this.stack = (new Error(message)).stack;
         }
     }
 
@@ -29,16 +29,41 @@ let VoIPTesterErrors = {
     NO_TURN_SERVERS: "No TURN servers",
     UNKNOWN: "Unknown",
 
+    INTERACTIVE_TEST_FAIL: "Interactive test failed",
+    NO_RELAY_CANDIDATES: "No relay candidates available to perform relay test",
+
     FAILED_SERVICE_REQUEST: "Failed testing service request",
     FAILED_DOCTOR_SDP: "Failed to doctor the SDP",
 };
 
 const MAGIC_QUESTION = "Hello? Is this on?";
 const MAGIC_ANSWER = "Yes; yes, it is! :^)";
+const MAGIC_QA_TIMEOUT = 150000;  // 150 seconds
 
 function getIpVersion(ipAddress) {
     return /^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$/.test(ipAddress)
         ? 'IPv4' : 'IPv6';
+}
+
+function parseTurnUri(uri) {
+    // yucky roll-your-own in the interest of time
+    let [uriPart, argsStr] = uri.split('?');
+    let [protocol, host, port] = uriPart.split(':');
+
+    let params = {transport: 'udp'};
+
+    let argPairStrs = argsStr.split('&');
+    for (let argPairStr of argPairStrs) {
+        let [key, value] = argPairStr.split('=');
+        params[key] = value;
+    }
+
+    return {
+        protocol: protocol,
+        host: host,
+        port: port,
+        params: params
+    };
 }
 
 class VoIPTester {
@@ -51,7 +76,7 @@ class VoIPTester {
     _fetchClient(path, method, body) {
         let extra = {
             headers: {
-              'Authorization': 'Bearer ' + this.accessToken,
+                'Authorization': 'Bearer ' + this.accessToken,
             },
             method: method,
         };
@@ -133,25 +158,28 @@ class VoIPTester {
         return resp_obj;
     }
 
-    gatherCandidatesForIceServer(turnUri, turnUsername, turnPassword) {
-        // filter out host results
-        let candidates = [];
+    gatherCandidatesForIceServer(turnUri, turnUsername, turnPassword, turnOnly) {
+        const candidates = [];
 
-        let conn = new RTCPeerConnection({
+        const conn = new RTCPeerConnection({
             iceServers: [
                 {
                     urls: turnUri,
                     username: turnUsername,
                     credential: turnPassword
                 }
-            ]
+            ],
+            // using 'relay' mode is an experiment, seems to prevent a lot of
+            // the hassle of the client generating peer-reflexive candidates by
+            // contacting the server directly...
+            iceTransportPolicy: turnOnly ? 'relay' : 'all'
         });
 
-        let datchan = conn.createDataChannel("voiptest");
+        const dataChannel = conn.createDataChannel("voiptest");
 
         // TODO debug
         window.conn = conn;
-        window.datchan = datchan;
+        window.dataChannel = dataChannel;
         window.candidates = candidates;
 
         return new Promise(resolve => {
@@ -160,24 +188,25 @@ class VoIPTester {
 
                 if (evt.candidate === null) {
                     // this is the end-of-candidates marker
-                    console.log("ld", conn.localDescription);
+                    console.log("End of candidates");
+                    console.log("Local description:", conn.localDescription);
                     resolve({
                         peerConnection: conn,
-                        dataChannel: datchan,
+                        dataChannel: dataChannel,
                         candidates: candidates,
                     });
                 } else {
                     candidates.push(evt.candidate);
                 }
 
-                evt.preventDefault();
+                evt.preventDefault(); // TODO what was this doing? is it needed? suspect it was for an experiment last year.
             };
 
-            console.log("waiting for negotiationneeded");
+            console.log("Waiting for negotiationneeded");
             conn.addEventListener("negotiationneeded", ev => {
-                console.log("creating offer");
+                console.log("negotionneeded fired; Creating offer");
                 conn.createOffer().then(offer => {
-                    console.log("offer", offer);
+                    console.log("Offer created:", offer);
                     conn.setLocalDescription(offer)
                 });
             });
@@ -191,9 +220,11 @@ class VoIPTester {
      * Beware that this probably won't behave for more than one media track.
      */
     doctorOfferSdp(offerSdp, soleWantedCandidate) {
+        console.log("in");
+        console.log(offerSdp);
         const sdpLines = offerSdp.split(/\r?\n/g);
 
-        const foundPreservedCandidate = false;
+        let foundPreservedCandidate = false;
 
         // .candidate gives the candidate SDP for it.
         const checkingFor = "a=" + soleWantedCandidate.candidate;
@@ -203,6 +234,8 @@ class VoIPTester {
                 // this is a candidate line
                 if (sdpLines[i] == checkingFor) {
                     foundPreservedCandidate = true;
+                    // make it candidate 0
+                    sdpLines[i] = sdpLines[i].replace(/candidate:[0-9]+/, "candidate:0");
                 } else {
                     // remove index i – not a wanted candidate
                     sdpLines.splice(i, 1);
@@ -212,16 +245,19 @@ class VoIPTester {
 
         if (! foundPreservedCandidate) {
             throw new VoIPTesterError(
-                VoIPTesterErrorCodes.FAILED_DOCTOR_SDP,
+                VoIPTesterErrors.FAILED_DOCTOR_SDP,
                 "Failed to find wanted candidate in offer SDP."
             );
         }
 
+        console.log("out");
+        console.log(sdpLines.join("\r\n"));
         return sdpLines.join("\r\n");
     }
 
     async testTurnRelaying(ipVersion, candidateResult) {
         // select a relay candidate of the appropriate IP version
+
         let candidate = null;
         for (let i = 0; i < candidateResult.candidates.length; ++i) {
             let potentialCandidate = candidateResult.candidates[i];
@@ -233,7 +269,7 @@ class VoIPTester {
         }
 
         if (candidate === null) {
-            return null; // TODO how to handle lack of candidate? Need to define response format.
+            throw new VoIPTesterError(VoIPTesterErrors.NO_RELAY_CANDIDATES);
         }
 
         let connection = candidateResult.peerConnection;
@@ -241,19 +277,18 @@ class VoIPTester {
 
         let doctoredSdp = this.doctorOfferSdp(connection.localDescription.sdp, candidate);
 
-        console.log("about to set doctored");
-        await connection.setLocalDescription({
-            sdp: doctoredSdp, type: 'offer'
-        });
-        console.log("just set doctored");
+        // we can't set the doctored SDP on ourselves — the browser won't allow
+        // it.
+        //await connection.setLocalDescription(connection.localDescription);
+
         const resp = await fetch(this.remoteTestServiceUrl, {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({
-                offer: connection.localDescription,
-                // candidate.candidate gives the SDP a= description of the
-                // candidate.
-                candidate: candidate.candidate
+                offer: {
+                    sdp: doctoredSdp,
+                    type: connection.localDescription.type
+                }
             })
         });
 
@@ -264,13 +299,80 @@ class VoIPTester {
             );
         }
 
+        let intentionalClose = false;
+
+        const finishedPromise = new Promise((resolve, reject) => {
+            const timer = window.setTimeout(function() {
+                intentionalClose = true;
+                dataChannel.close();
+                connection.close();
+                reject(new VoIPTesterError(
+                    VoIPTesterErrors.INTERACTIVE_TEST_FAIL,
+                    "Echo test timed out."
+                ));
+            }, MAGIC_QA_TIMEOUT);
+
+            dataChannel.onmessage = function (event) {
+                console.log("received: " + event.data);
+                if (event.data == MAGIC_ANSWER) {
+                    console.log("senders", connection.getSenders());
+                    console.log("receivers", connection.getReceivers());
+                    console.log("got the magic answer!");
+                    // stop the timeout timer
+                    window.clearTimeout(timer);
+                    intentionalClose = true;
+                    dataChannel.close();
+                    connection.close();
+                    resolve();
+                }
+            };
+
+            dataChannel.onopen = function () {
+                console.log("datachannel open, sending magic question");
+                dataChannel.send(MAGIC_QUESTION);
+            };
+
+            dataChannel.onclose = function () {
+                console.log("datachannel close");
+                if (! intentionalClose) {
+                    reject(new VoIPTesterError(
+                        VoIPTesterErrors.INTERACTIVE_TEST_FAIL,
+                        "Data channel closed unexpectedly."
+                    ));
+                }
+            };
+
+            dataChannel.onerror = function (event) {
+                console.error("datachannel error", event.message, event.filename, event.lineno, event.colno);
+                reject(new VoIPTesterError(
+                    VoIPTesterErrors.INTERACTIVE_TEST_FAIL,
+                    "Data channel error: " + event.message
+                ));
+                intentionalClose = true;
+            }
+        });
+
+
         const serviceResponse = await resp.json();
         console.log("ANSWER", serviceResponse.answer);
-        connection.setRemoteDescription(serviceResponse.answer);
+        connection.setRemoteDescription(serviceResponse.answer); // TODO await??
 
-        // TODO wait for things to happen … or time out with failure (does this happen automatically?)
+        // wait for things to happen, or time out with failure
+        try {
+            await finishedPromise;
+        } catch (error) {
+            console.error("during TURN test", error);
+            return {
+                success: false,
+                error: error
+            };
+        }
 
-        // TODO
+        return {
+            success: true,
+            // TODO can we store the active candidate here? Even if we must ask
+            // the server for it...
+        };
     }
 
     /**
@@ -291,18 +393,41 @@ class VoIPTester {
             testPassReport[turnUri] = {};
 
             this.onProgress(2, i, numUris, "TURN URI: " + turnUri);
-            this.onProgress(3, 0, 2, "Gathering candidates");
 
-            const candidateResult = await this.gatherCandidatesForIceServer(turnUri, turnConfig.username, turnConfig.password);
-            testPassReport[turnUri].candidates = this.summariseCandidateGathering(candidateResult);
+            this.onProgress(3, 0, 3, "Gathering candidates");
 
-            this.onProgress(3, 1, 2, "Testing TURN relaying");
+            const candidateResult = await this.gatherCandidatesForIceServer(turnUri, turnConfig.username, turnConfig.password, false);
+            testPassReport[turnUri].candidates = this.summariseCandidateGathering(candidateResult, ipVersion);
 
-            const turnRelayResult = await this.testTurnRelaying(ipVersion, candidateResult);
+            this.onProgress(3, 1, 3, "Gathering relay candidates for a TURN test");
+
+            // annoyingly, setting the ICE policy to relay seems to make a useful change
+            // for making the TURN test actually consistent.
+            // Unfortunately, it doesn't exercise STUN functionality by doing that, so
+            const turnCandidateResult = await this.gatherCandidatesForIceServer(turnUri, turnConfig.username, turnConfig.password, true);
+
+            this.onProgress(3, 2, 3, "Testing TURN relaying");
+
+            let turnRelayResult;
+
+            try {
+                turnRelayResult = await this.testTurnRelaying(ipVersion, turnCandidateResult);
+            } catch (error) {
+                console.error("during testTurnRelaying", error);
+                turnRelayResult = {
+                    success: false,
+                    error: error
+                };
+            }
+
             testPassReport[turnUri].turnRelayResult = turnRelayResult;
 
-            testPassReport[turnUri].report = this.summariseTurnUriReport(ipVersion, testPassReport[turnUri]);
+            testPassReport[turnUri].report = this.summariseTurnUriReport(ipVersion, turnUri, testPassReport[turnUri]);
+
+            this.onProgress(3, 3, 3, "TURN relay test attempted");
         }
+
+        this.onProgress(2, numUris, numUris, "All TURN URIs attempted");
 
         return testPassReport;
     }
@@ -317,6 +442,8 @@ class VoIPTester {
             }
         };
 
+        window.testReport = testReport;
+
         const turnConfig = await this.gatherTurnConfig();
 
         this.onProgress(1, 1, 3, "Testing (IPv4 candidates)");
@@ -330,28 +457,91 @@ class VoIPTester {
         const ipv6 = await this.runIpVersionedTest('IPv6', testReport, testReport.turnConfig);
         testReport.passes.IPv6 = ipv6;
 
+        this.onProgress(1, 3, 3, "Test complete");
+
         // TODO finalise and process report
 
         return testReport;
     }
 
 
-    summariseCandidateGathering(candidateResult) {
+    summariseCandidateGathering(candidateResult, ipVersion) {
+        let candidates = [];
+
+        let seenType = {
+            srflx: false,
+            relay: false
+        };
+
+        for (let candidate of candidateResult.candidates) {
+            if (getIpVersion(candidate.ip) !== ipVersion) {
+                continue;
+            }
+            if (candidate.type == 'srflx' || candidate.type == 'relay') {
+                seenType[candidate.type] = true;
+                candidates.push({
+                    proto: candidate.protocol,
+                    type: candidate.type,
+                    ip: candidate.ip,
+                    port: candidate.port
+                });
+            }
+        }
+
         return {
-            "blergh": "PASS maybe" // TODO what do we do here. Just copy telling fields from the IceCandidates
+            details: candidates,
+            stun: seenType.srflx,
+            turn: seenType.relay,
         };
     }
 
-    summariseTurnUriReport(ipVersion, turnUriReport) {
-        return {
-            "blergh": "PASS maybe" // TODO what do we do here
+    summariseTurnUriReport(ipVersion, uri, turnUriReport) {
+        let flags = [];
+        const parsedUri = parseTurnUri(uri);
+
+        const transport = parsedUri.params.transport || 'udp';
+        if (transport == 'udp') {
+            switch (parsedUri.protocol) {
+            case 'turn':
+                flags.push('udp-turn');
+                break;
+            case 'turns':
+                flags.push('udp-turns');
+                break;
+            default:
+                console.warn("unknown protocol", parsedUri.protocol);
+            }
+        } else if (transport == 'tcp') {
+            switch (parsedUri.protocol) {
+                case 'turn':
+                    flags.push('tcp-turn');
+                    break;
+                case 'turns':
+                    flags.push('tcp-turns');
+                    if (parsedUri.port === 443) {
+                        flags.push('tcp-turns-443');
+                    }
+                    break;
+                default:
+                    console.warn("unknown protocol", parsedUri.protocol);
+            }
+        } else {
+            console.warn("unknown transport", parsedUri.params.transport);
+        }
+
+        let result = {
+            flags: flags,
+            stun: turnUriReport.candidates.stun, // TODO test stun gives the correct answer...
+            turn: turnUriReport.candidates.turn && turnUriReport.turnRelayResult.success,
         };
 
-        // report architecture: want a:
-        // - success? Or else any information we know
-        // - time ?
-        // - feature flags (e.g. TURNS; TURNS over 443)
-        // -
+        if (turnUriReport.turnRelayResult.error !== undefined) {
+            result.relayingError = turnUriReport.turnRelayResult.error;
+        }
+
+        // TODO do we want to report the time taken for anything?
+
+        return result;
     }
 
 
