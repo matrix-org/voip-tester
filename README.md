@@ -29,6 +29,32 @@ This process is repeated for every TURN URI and in both IPv4 and IPv6 to build u
 a report.
 
 
+#### Current scoring system
+
+**Overall scores for IPv4 and IPv6 support**:
+
+* Fail: No STUN or TURN support whatsoever.
+* Poor: Either only STUN or only TURN.
+* Good: STUN and TURN supported over at least one protocol.
+* Great: STUN and TURN over both TCP and UDP, both secure and insecure.
+* Excellent: In addition to great, there is a secure TURN service over TCP port
+  443 (which looks like HTTPS traffic and will likely get through more firewalls).
+
+<u>Note:</u> The requirement to have insecure transports to get a 'Great' score is
+likely to go away.
+
+**Scores for individual TURN URIs:**
+
+* Fail: Neither STUN candidates nor (working) TURN candidates found.
+* Poor: Either only STUN candidates found, or only (working) TURN candidates found.
+* Excellent: Both STUN candidates and TURN candidates found — and the TURN candidate
+  was tested to work.
+
+<u>Note:</u> Currently, only unencrypted UDP TURN URIs seem to generate STUN
+URIs and thus other TURN URIs fail to achieve Excellent — even on reputable
+servers. This is being investigated and may be a bug in the tester.
+
+
 ### Warning
 
 This utility is not yet finished and is not known to behave or report correctly;
