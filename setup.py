@@ -1,7 +1,7 @@
 from setuptools import setup
 
 setup(
-    name="matrix-voip-tester",
+    name="mxvoiptestd",
     version="0.1.0",
     packages=["mxvoiptestd"],
     url="https://github.com/matrix-org/matrix_voip_tester",
