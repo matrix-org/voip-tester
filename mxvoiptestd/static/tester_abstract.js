@@ -533,7 +533,7 @@ class VoIPTester {
                     break;
                 case 'turns':
                     flags.push('tcp-turns');
-                    if (parsedUri.port === 443) {
+                    if (parsedUri.port === '443') {
                         flags.push('tcp-turns-443');
                     }
                     break;
