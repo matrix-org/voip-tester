@@ -248,8 +248,14 @@ function displayVersionedReport(report, version, rootNode) {
                 serverVerdict = 'Poor';
                 break;
             case 'T':
-                serverSummary = 'TURN only';
-                serverVerdict = 'Poor';
+                if (! reportForServer.report.flags['udp-turn']) {
+                    // not expecting STUN unless it's cleartext UDP
+                    serverSummary = 'TURN';
+                    serverVerdict = 'Excellent';
+                } else {
+                    serverSummary = 'TURN only';
+                    serverVerdict = 'Poor';
+                }
                 break;
             case 'ST':
                 serverSummary = 'STUN & TURN';
