@@ -254,7 +254,7 @@ class VoIPTester {
             if (sdpLines[i].startsWith(checkingFor)) {
                 // this is a candidate line, and it's the one we want
                 foundPreservedCandidate = true;
-            } else if (sdpLines[i].startsWith("a=candidate:") {
+            } else if (sdpLines[i].startsWith("a=candidate:")) {
                 // remove index i – not a wanted candidate
                 sdpLines.splice(i, 1);
             }
