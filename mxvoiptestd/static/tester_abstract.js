@@ -497,7 +497,7 @@ class VoIPTester {
                 candidates.push({
                     proto: candidate.protocol,
                     type: candidate.type,
-                    ip: candidate.ip,
+                    ip: candidate.ip || candidate.address,
                     port: candidate.port
                 });
             }
