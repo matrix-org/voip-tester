@@ -246,20 +246,17 @@ class VoIPTester {
 
         let foundPreservedCandidate = false;
 
-        // .candidate gives the candidate SDP for it.
-        const checkingFor = "a=" + soleWantedCandidate.candidate;
+        // .candidate gives the candidate SDP for it, but this varies from the SDP!
+        // .foundation is a unique identifier, and not necessarily ordinal
+        const checkingFor = "a=candidate:" + soleWantedCandidate.foundation + " ";
 
         for (let i = sdpLines.length - 1; i >= 0; --i) {
-            if (sdpLines[i].startsWith("a=candidate:")) {
-                // this is a candidate line
-                if (sdpLines[i] == checkingFor) {
-                    foundPreservedCandidate = true;
-                    // make it candidate 0
-                    sdpLines[i] = sdpLines[i].replace(/candidate:[0-9]+/, "candidate:0");
-                } else {
-                    // remove index i – not a wanted candidate
-                    sdpLines.splice(i, 1);
-                }
+            if (sdpLines[i].startsWith(checkingFor)) {
+                // this is a candidate line, and it's the one we want
+                foundPreservedCandidate = true;
+            } else if (sdpLines[i].startsWith("a=candidate:") {
+                // remove index i – not a wanted candidate
+                sdpLines.splice(i, 1);
             }
         }
 
