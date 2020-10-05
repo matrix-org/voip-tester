@@ -202,7 +202,7 @@ function displayVersionedReport(report, version, rootNode) {
             verSummary = 'STUN & TURN (unencrypted credentials!)';
             verVerdict = 'Good';
             extraInfo = 'With STUN support and TURN, most users will succeed in establishing a connection. ' +
-                'However, your TURN service is not encrypted, which means that TURN credentials will be sent in cleartext
+                'However, your TURN service is not encrypted, which means that TURN credentials will be sent in cleartext. ' +
                 'Beyond this, some firewalls are configured to block most outbound ports. If you have a Secure TURN service on TCP port 443, ' +
                 'you would have the highest chance of being able to evade firewall rules in locked-down environments. ';
         } else {
