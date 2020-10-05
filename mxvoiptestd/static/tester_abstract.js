@@ -282,7 +282,7 @@ class VoIPTester {
         for (let i = 0; i < candidateResult.candidates.length; ++i) {
             let potentialCandidate = candidateResult.candidates[i];
             if (potentialCandidate.type == 'relay' &&
-                getIpVersion(potentialCandidate.ip) == ipVersion) {
+                getIpVersion(potentialCandidate.ip || potentialCandidate.address) == ipVersion) {
                 candidate = potentialCandidate;
                 break;
             }
@@ -494,7 +494,7 @@ class VoIPTester {
         };
 
         for (let candidate of candidateResult.candidates) {
-            if (getIpVersion(candidate.ip) !== ipVersion) {
+            if (getIpVersion(candidate.ip || candidate.address) !== ipVersion) {
                 continue;
             }
             if (candidate.type == 'srflx' || candidate.type == 'relay') {
