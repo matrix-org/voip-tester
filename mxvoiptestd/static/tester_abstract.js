@@ -58,7 +58,7 @@ const MAGIC_QA_TIMEOUT = 150000;  // 150 seconds
 function getIpVersion(ipAddress) {
     if (/^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$/.test(ipAddress)) {
         return 'IPv4';
-    } else if (ipAddress.indexOf('::') !== -1) {
+    } else if (ipAddress.indexOf(':') !== -1) {
         return 'IPv6';
     } else {
         return 'mDNS or other';
@@ -588,4 +588,3 @@ class VoIPTester {
         console.log(prefix + "[" + currentValue + "/" + maxValue + "] " + statusLine);
     }
 }
-
