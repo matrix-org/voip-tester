@@ -197,11 +197,6 @@ class VoIPTester {
 
         const dataChannel = conn.createDataChannel("voiptest");
 
-        // TODO debug
-        window.conn = conn;
-        window.dataChannel = dataChannel;
-        window.candidates = candidates;
-
         return new Promise(resolve => {
             conn.onicecandidate = function (evt) {
                 console.log("ICE Candidate", evt);
@@ -220,6 +215,11 @@ class VoIPTester {
                 }
 
                 evt.preventDefault(); // TODO what was this doing? is it needed? suspect it was for an experiment last year.
+            };
+
+            conn.onicegatheringstatechange = function (evt) {
+                const newState = conn.iceGatheringState;
+                console.log("ICE now in state:", newState);
             };
 
             console.log("Waiting for negotiationneeded");
@@ -245,6 +245,7 @@ class VoIPTester {
         const sdpLines = offerSdp.split(/\r?\n/g);
 
         let foundPreservedCandidate = false;
+        let foundEndOfCandidates = false;
 
         // .candidate gives the candidate SDP for it, but this varies from the SDP!
         // .foundation is a unique identifier, and not necessarily ordinal
@@ -254,9 +255,15 @@ class VoIPTester {
             if (sdpLines[i].startsWith(checkingFor)) {
                 // this is a candidate line, and it's the one we want
                 foundPreservedCandidate = true;
+                if (! foundEndOfCandidates) {
+                    sdpLines.insert(i + 1, "a=end-of-candidates");
+                }
             } else if (sdpLines[i].startsWith("a=candidate:")) {
                 // remove index i – not a wanted candidate
                 sdpLines.splice(i, 1);
+            }
+            if (sdpLines[i].startsWith("a=end-of-candidates")) {
+                foundEndOfCandidates = true;
             }
         }
 
