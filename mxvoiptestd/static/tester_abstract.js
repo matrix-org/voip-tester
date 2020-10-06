@@ -498,6 +498,9 @@ class VoIPTester {
         };
 
         for (let candidate of candidateResult.candidates) {
+            if (candidate.candidate === '') {
+                continue;
+            }
             if (getIpVersion(candidate.ip || candidate.address) !== ipVersion) {
                 continue;
             }
