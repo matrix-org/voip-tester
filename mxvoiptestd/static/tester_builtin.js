@@ -155,32 +155,74 @@ function displayVersionedReport(report, version, rootNode) {
 
     let verSummary;
     let verVerdict;
+    let extraInfo = null;
 
     switch (combo) {
     case 'S':
         verSummary = 'STUN only (No TURN)';
         verVerdict = 'Poor';
+        extraInfo = 'STUN will help users with some kinds of NATs. ' +
+            'However, some NATs will need TURN support for connections to succeed.';
         break;
     case 'T':
         verSummary = 'TURN only (No STUN)';
         verVerdict = 'Poor';
+        extraInfo = 'TURN will help users on all kinds of NATs. ' +
+            'From this perspective, your configuration is good. ' +
+            'However, TURN involves relaying all the users\' traffic, which can be costly or overload your server if there are many connections. ' +
+            'For some users, STUN would suffice and would allow these users to establish direct connections, so your server would not need to ' +
+            'relay all their traffic. For this reason, working STUN configuration is recommended.';
+            // TODO offer context-sensitive help of TURN/UDP candidate if one doesn't exist.
         break;
     case 'ST':
         verSummary = 'STUN & TURN';
-        // TODO we may want to not mark people down for not supplying insecure TURN protocols...?
-        if (flags['tcp-turn'] && flags['tcp-turns'] && flags['tcp-turns-443']
-            && flags['udp-turn'] && flags['udp-turns']) {
+
+        // Scoring strategy for STUN+TURN compatible:
+        // - Good: TURN/udp (STUN over TLS not commonly implemented so always want this)
+        // - Great: TURNS/tcp plus Good
+        // - Excellent: TURNS/tcp on port 443 plus Good
+
+        if (flags['tcp-turns-443'] && flags['udp-turn']) {
+            // This has the best chance of success AND encrypts the credentials.
             verVerdict = 'Excellent';
-        } else if (flags['tcp-turn'] && flags['tcp-turns']
-            && flags['udp-turn'] && flags['udp-turns']) {
+            extraInfo = 'With STUN support and TURN, most users will succeed in establishing a connection. ' +
+                'On top of that, thanks to support of Encrypted TURN over port 443, you have the highest chance of ' +
+                'being able to evade firewall rules in locked-down environments.';
+        } else if (flags['udp-turn'] && (flags['tcp-turns'] || flags['udp-turns'])) {
+            // TODO think: TURNS/udp is barely a thing, apparently
+            // Require an encrypted method for TURN credentials for Great
             verVerdict = 'Great';
-        } else {
+            extraInfo = 'With STUN support and TURN, most users will succeed in establishing a connection. ' +
+                'However, some firewalls are configured to block most outbound ports. If you have a Secure TURN service on TCP port 443, ' +
+                'you would have the highest chance of being able to evade firewall rules in locked-down environments. ' +
+                'This score is often "good enough" for small homeservers used by individuals who do not have corporate-style locked-down ' +
+                'firewalls.';
+        } else if (flags['udp-turn']) {
+            // STUN is only available over unencrypted UDP in many browsers
+            verSummary = 'STUN & TURN (unencrypted credentials!)';
             verVerdict = 'Good';
+            extraInfo = 'With STUN support and TURN, most users will succeed in establishing a connection. ' +
+                'However, your TURN service is not encrypted, which means that TURN credentials will be sent in cleartext. ' +
+                'Beyond this, some firewalls are configured to block most outbound ports. If you have a Secure TURN service on TCP port 443, ' +
+                'you would have the highest chance of being able to evade firewall rules in locked-down environments. ';
+        } else {
+            verVerdict = 'Poor';
+            verSummary = 'STUN & TURN (with caveats)';
+            extraInfo = 'This score means that you do not have a TURN service over unencrypted UDP. ' +
+                'Many web browsers are not able to perform STUN except over unencrypted UDP. ' +
+                'For best results, add a STUN (or TURN) service over unencrypted UDP so that these implementations can do STUN.';
         }
         break;
     case '':
         verSummary = 'No support';
         verVerdict = 'Fail';
+        if (version === 'IPv6') {
+            extraInfo = 'No STUN or TURN support found. Do both your browser and network have IPv6 support? ' +
+                'If not, you are unable to test it. Please note that some browsers will not try IPv6 if IPv4 is ' +
+                'available, which will mean this test is invalid.';
+        } else {
+            extraInfo = 'No STUN or TURN support found. (Do you have IPv4 support?)';
+        }
         break;
     default:
         verSummary = '???';
@@ -188,6 +230,8 @@ function displayVersionedReport(report, version, rootNode) {
     }
 
     const verNode = newReportNode(rootNode, 'Test servers (' + version + ')', verSummary, verVerdict, true);
+
+    newInfoNode(verNode, extraInfo);
 
 
     for (let server of turnUrisSorted) {
@@ -204,8 +248,14 @@ function displayVersionedReport(report, version, rootNode) {
                 serverVerdict = 'Poor';
                 break;
             case 'T':
-                serverSummary = 'TURN only';
-                serverVerdict = 'Poor';
+                if (! reportForServer.report.flags['udp-turn']) {
+                    // not expecting STUN unless it's cleartext UDP
+                    serverSummary = 'TURN';
+                    serverVerdict = 'Excellent';
+                } else {
+                    serverSummary = 'TURN only';
+                    serverVerdict = 'Poor';
+                }
                 break;
             case 'ST':
                 serverSummary = 'STUN & TURN';

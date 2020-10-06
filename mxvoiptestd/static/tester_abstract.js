@@ -56,8 +56,13 @@ const MAGIC_ANSWER = "Yes; yes, it is! :^)";
 const MAGIC_QA_TIMEOUT = 150000;  // 150 seconds
 
 function getIpVersion(ipAddress) {
-    return /^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$/.test(ipAddress)
-        ? 'IPv4' : 'IPv6';
+    if (/^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$/.test(ipAddress)) {
+        return 'IPv4';
+    } else if (ipAddress.indexOf(':') !== -1) {
+        return 'IPv6';
+    } else {
+        return 'mDNS or other';
+    }
 }
 
 function parseTurnUri(uri) {
@@ -192,11 +197,6 @@ class VoIPTester {
 
         const dataChannel = conn.createDataChannel("voiptest");
 
-        // TODO debug
-        window.conn = conn;
-        window.dataChannel = dataChannel;
-        window.candidates = candidates;
-
         return new Promise(resolve => {
             conn.onicecandidate = function (evt) {
                 console.log("ICE Candidate", evt);
@@ -215,6 +215,11 @@ class VoIPTester {
                 }
 
                 evt.preventDefault(); // TODO what was this doing? is it needed? suspect it was for an experiment last year.
+            };
+
+            conn.onicegatheringstatechange = function (evt) {
+                const newState = conn.iceGatheringState;
+                console.log("ICE now in state:", newState);
             };
 
             console.log("Waiting for negotiationneeded");
@@ -240,21 +245,25 @@ class VoIPTester {
         const sdpLines = offerSdp.split(/\r?\n/g);
 
         let foundPreservedCandidate = false;
+        let foundEndOfCandidates = false;
 
-        // .candidate gives the candidate SDP for it.
-        const checkingFor = "a=" + soleWantedCandidate.candidate;
+        // .candidate gives the candidate SDP for it, but this varies from the SDP!
+        // .foundation is a unique identifier, and not necessarily ordinal
+        const checkingFor = "a=candidate:" + soleWantedCandidate.foundation + " ";
 
         for (let i = sdpLines.length - 1; i >= 0; --i) {
-            if (sdpLines[i].startsWith("a=candidate:")) {
-                // this is a candidate line
-                if (sdpLines[i] == checkingFor) {
-                    foundPreservedCandidate = true;
-                    // make it candidate 0
-                    sdpLines[i] = sdpLines[i].replace(/candidate:[0-9]+/, "candidate:0");
-                } else {
-                    // remove index i – not a wanted candidate
-                    sdpLines.splice(i, 1);
+            if (sdpLines[i].startsWith(checkingFor)) {
+                // this is a candidate line, and it's the one we want
+                foundPreservedCandidate = true;
+                if (! foundEndOfCandidates) {
+                    sdpLines.splice(i + 1, 0, "a=end-of-candidates");
                 }
+            } else if (sdpLines[i].startsWith("a=candidate:")) {
+                // remove index i – not a wanted candidate
+                sdpLines.splice(i, 1);
+            }
+            if (sdpLines[i].startsWith("a=end-of-candidates")) {
+                foundEndOfCandidates = true;
             }
         }
 
@@ -277,7 +286,7 @@ class VoIPTester {
         for (let i = 0; i < candidateResult.candidates.length; ++i) {
             let potentialCandidate = candidateResult.candidates[i];
             if (potentialCandidate.type == 'relay' &&
-                getIpVersion(potentialCandidate.ip) == ipVersion) {
+                getIpVersion(potentialCandidate.ip || potentialCandidate.address) == ipVersion) {
                 candidate = potentialCandidate;
                 break;
             }
@@ -489,7 +498,10 @@ class VoIPTester {
         };
 
         for (let candidate of candidateResult.candidates) {
-            if (getIpVersion(candidate.ip) !== ipVersion) {
+            if (candidate.candidate === '') {
+                continue;
+            }
+            if (getIpVersion(candidate.ip || candidate.address) !== ipVersion) {
                 continue;
             }
             if (candidate.type == 'srflx' || candidate.type == 'relay') {
@@ -497,7 +509,7 @@ class VoIPTester {
                 candidates.push({
                     proto: candidate.protocol,
                     type: candidate.type,
-                    ip: candidate.ip,
+                    ip: candidate.ip || candidate.address,
                     port: candidate.port
                 });
             }
@@ -533,7 +545,7 @@ class VoIPTester {
                     break;
                 case 'turns':
                     flags.push('tcp-turns');
-                    if (parsedUri.port === 443) {
+                    if (parsedUri.port === '443') {
                         flags.push('tcp-turns-443');
                     }
                     break;
@@ -579,4 +591,3 @@ class VoIPTester {
         console.log(prefix + "[" + currentValue + "/" + maxValue + "] " + statusLine);
     }
 }
-
