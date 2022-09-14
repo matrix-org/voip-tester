@@ -67,10 +67,12 @@ function parseTurnUri(uri) {
 
     let params = {transport: 'udp'};
 
-    let argPairStrs = argsStr.split('&');
-    for (let argPairStr of argPairStrs) {
-        let [key, value] = argPairStr.split('=');
-        params[key] = value;
+    if (argsStr !== null && argsStr !== undefined) {
+        let argPairStrs = argsStr.split('&');
+        for (let argPairStr of argPairStrs) {
+            let [key, value] = argPairStr.split('=');
+            params[key] = value;
+        }
     }
 
     return {
